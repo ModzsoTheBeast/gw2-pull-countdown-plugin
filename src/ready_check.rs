@@ -1,0 +1,69 @@
+use nexus::event::event_consume;
+use nexus::event::extras::{EXTRAS_SQUAD_UPDATE, SquadUpdate, UserRole};
+use std::collections::HashSet;
+use std::sync::{LazyLock, Mutex};
+
+struct ReadyCheckState {
+    ready_accounts: HashSet<String>,
+    triggered: bool,
+}
+
+static STATE: LazyLock<Mutex<ReadyCheckState>> = LazyLock::new(|| {
+    Mutex::new(ReadyCheckState {
+        ready_accounts: HashSet::new(),
+        triggered: false,
+    })
+});
+
+/// Subscribes to the Unofficial Extras squad update bridge to detect ready checks succeeding
+/// (same requirement as chat mirroring: only fires if the local client also has arcdps +
+/// Unofficial Extras installed). Gated on `Settings::auto_pull_after_ready_check` at the top of
+/// the handler rather than at subscribe time, so toggling the setting takes effect immediately.
+pub fn subscribe() {
+    EXTRAS_SQUAD_UPDATE
+        .subscribe(event_consume!(<SquadUpdate> |update| {
+            if let Some(update) = update {
+                on_squad_update(update);
+            }
+        }))
+        .revert_on_unload();
+}
+
+fn on_squad_update(update: &SquadUpdate) {
+    if !crate::state::SETTINGS.lock().unwrap().auto_pull_after_ready_check {
+        return;
+    }
+
+    let mut state = STATE.lock().unwrap();
+
+    for user in update.iter() {
+        if user.role == UserRole::SquadLeader && user.ready_status {
+            // Per Unofficial Extras' docs, the leader's own ready_status flipping to true
+            // signals that a ready check was just started - reset tracking for it.
+            state.ready_accounts.clear();
+            state.triggered = false;
+            continue;
+        }
+        if user.ready_status {
+            if let Some(name) = user.account_name() {
+                state.ready_accounts.insert(name.to_string());
+            }
+        }
+    }
+
+    if state.triggered {
+        return;
+    }
+
+    // Can't confirm "everyone" without a member count - don't guess.
+    let Some(total_members) = crate::squad::group_member_count() else {
+        return;
+    };
+
+    if total_members > 0 && state.ready_accounts.len() as u32 >= total_members {
+        state.triggered = true;
+        drop(state);
+        let start_count = crate::state::SETTINGS.lock().unwrap().start_count;
+        crate::chat_send::on_ready_check_succeeded(start_count);
+    }
+}

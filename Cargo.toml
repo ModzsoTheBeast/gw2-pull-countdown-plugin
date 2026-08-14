@@ -1,0 +1,33 @@
+[package]
+name = "gw2-pull-countdown-plugin"
+version = "0.1.0"
+edition = "2021"
+description = "Commander-triggered pull countdown, synced across the whole squad."
+
+[lib]
+name = "gw2_pull_countdown_plugin"
+crate-type = ["cdylib"]
+
+[dependencies]
+nexus = { git = "https://github.com/zerthox/nexus-rs", features = [
+    "rtapi",
+    "extras",
+    "mumble",
+    "log",
+    "log_filter",
+] }
+
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Must match whatever version nexus-rs itself pins (see its Cargo.toml), otherwise
+# HWND/WPARAM/LPARAM/LRESULT won't unify with send_wnd_proc_to_game's signature.
+windows = { version = "=0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+] }
+
+[profile.release]
+panic = "unwind"
