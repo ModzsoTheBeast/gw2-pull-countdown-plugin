@@ -1,6 +1,6 @@
 [package]
 name = "gw2-pull-countdown-plugin"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Commander-triggered pull countdown, synced across the whole squad."
 # Shown as the addon's author in Nexus's addon manager - blank without this.
