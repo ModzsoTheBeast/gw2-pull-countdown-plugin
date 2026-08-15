@@ -1,5 +1,5 @@
 use crate::{overlay_font, settings, state};
-use nexus::imgui::{ColorEdit, Condition, InputInt, InputText, Slider, Ui, Window};
+use nexus::imgui::{ColorEdit, Condition, InputInt, InputText, Slider, StyleVar, Ui, Window};
 use std::sync::Mutex;
 
 const PULL_FLASH_COLOR: [f32; 4] = [1.0, 0.2, 0.2, 1.0];
@@ -63,6 +63,12 @@ fn draw_overlay(ui: &Ui) {
     } else {
         window.movable(true).bg_alpha(0.35)
     };
+
+    // Nexus's theme draws a 1px window border, which reads as a stray outline around the bare
+    // countdown text. Suppressed while locked; kept while unlocked, where it usefully shows the
+    // bounds of the thing being dragged. Must be pushed before build(), since the border is
+    // resolved when the window begins, and it pops on drop at the end of this function.
+    let _no_border = locked.then(|| ui.push_style_var(StyleVar::WindowBorderSize(0.0)));
 
     let font = overlay_font::current();
     let final_center = window.build(ui, || {
