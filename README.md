@@ -8,7 +8,7 @@ whatever starting number is currently configured; clicking it again while a coun
 cancels it instead (and posts a "Pull cancelled" chat message). Starting a pull:
 
 - immediately shows a big, customizable on-screen countdown overlay, counting down to `PULL!`
-  (with a short local alert sound the instant it gets there), and
+  (with local countdown/pull sounds, each individually toggleable), and
 - sends a chat message into the current squad/party chat (squad if it can't be determined - see
   Configuring below), so anyone without the addon still sees a plain-text heads-up. By default
   this is a single message (e.g. "Pulling in 10..."); optionally it can instead count down in
@@ -51,9 +51,13 @@ Below that:
   normal chat in a plain party). Only those two lines ever broadcast, even with chat countdown
   on - broadcasts stay on screen for several seconds and queue up (falling out of sync with the
   overlay) if sent every second, so the ticks in between always use normal chat regardless.
-- **Overlay appearance** - position, size, color, and a short local alert sound on "PULL!"
-  (on by default). To reposition, uncheck "Lock position": a draggable preview appears on
-  screen, and re-checking the box locks it back in place.
+- **Overlay appearance** - position, size, and color. To reposition, uncheck "Lock position": a
+  draggable preview appears on screen, and re-checking the box locks it back in place.
+- **Sound** - two independent toggles, both on by default and both local only (nothing is played
+  on anyone else's client). The countdown sound beeps down the final five seconds in time with
+  the on-screen numbers; because it's a fixed five seconds long, it's skipped entirely when the
+  starting number is below 5. The pull sound fires as the count reaches "PULL!". Cancelling a
+  pull stops the countdown sound immediately.
 - **Automation** - "Auto-pull after ready check" triggers a pull automatically once a squad
   ready check finishes with everyone ready (needs arcdps + Unofficial Extras to detect it).
 
@@ -89,8 +93,14 @@ Copy it into `<Guild Wars 2 install>/addons/`.
 `assets/` bundles a dedicated font used only for the countdown overlay text (`Roboto.ttf`,
 SIL Open Font License - see `assets/Roboto-OFL.txt`), rebaked at whatever size is configured so
 it stays crisp instead of blurring like a scaled-up bitmap font would, the quick access toolbar
-icon (`quick_access_icon.png` / `_hover.png`), and a short generated alert sound (`pull.wav`,
-a two-tone chime synthesized for this project - no licensing to track).
+icon (`quick_access_icon.png` / `_hover.png`), and the two alert sounds (`countdown.wav`,
+`pull.wav`).
+
+The sounds are 48kHz 16-bit mono PCM WAV, which is not incidental: they're played with Win32
+`PlaySound`, which handles **WAV only** (no MP3), and mono keeps the embedded size sensible
+since both are compiled into the DLL. `countdown.wav` must stay exactly 5 seconds with its
+beats one second apart - the code starts it precisely 5 seconds from zero so each beat lands on
+a digit, so replacing it with a different length would desynchronise it from the overlay.
 
 ## Releasing a new version
 
@@ -192,9 +202,13 @@ There's no headless test harness for a live game overlay, so verification is man
     something in the new one, switch back to the original and confirm its own settings (not the
     new profile's) are what's active, then rename and delete the new profile and confirm it can't
     delete the last remaining profile.
-18. Sound - confirm the alert sound plays exactly once, right as the overlay reaches "PULL!" (not
-    once per frame during the linger, and not for the mirrored "10" preview while dragging the
-    overlay), and that unchecking "Sound on PULL!" silences it.
+18. Sound - with a starting number above 5, confirm the countdown sound starts exactly as the
+    overlay hits 5 and its beats land on 5/4/3/2/1, and the pull sound fires as it reaches
+    "PULL!". Each plays once (not once per frame during the linger, and not for the "10" preview
+    shown while repositioning the overlay). Then check: a starting number below 5 plays no
+    countdown sound at all but still plays the pull sound; a starting number of exactly 5 starts
+    the countdown sound immediately; cancelling mid-countdown cuts the sound off; and each
+    checkbox silences its own sound independently.
 19. Broadcast timing - with both "Countdown in chat" and "Use squad broadcast" on, trigger a
     pull and confirm only the upfront message and the final "pull now" line show up as squad
     broadcasts, while every tick in between (5, 4, 3...) lands in normal chat instead - and that

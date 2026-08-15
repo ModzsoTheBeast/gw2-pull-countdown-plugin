@@ -123,6 +123,8 @@ fn start_pull(total: u32) {
 /// `start_pull` - sends a chat message announcing the cancellation.
 fn cancel_pull() {
     crate::countdown::cancel();
+    // Otherwise the 5s countdown sound keeps beeping toward a pull that isn't happening.
+    crate::sound::stop();
 
     let Some((hwnd_raw, channel)) = resolve_send_target() else {
         return;

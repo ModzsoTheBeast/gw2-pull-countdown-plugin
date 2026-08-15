@@ -23,9 +23,12 @@ pub struct Settings {
     /// Whether the overlay is pinned in place. While unlocked, it can be dragged and shows a
     /// preview even with no countdown running, so it can be positioned without spamming Pull.
     pub overlay_locked: bool,
-    /// On by default: plays a short alert sound the moment the count reaches "PULL!" (local
-    /// only - it's not sent to anyone else).
-    pub sound_enabled: bool,
+    /// On by default: plays a five-beat countdown sound over the last five seconds. Only used
+    /// when the countdown is at least that long, since the sound is a fixed 5s (see
+    /// `countdown::COUNTDOWN_SOUND_SECS`). Local only - not sent to anyone else.
+    pub sound_countdown_enabled: bool,
+    /// On by default: plays an alert sound the moment the count reaches "PULL!" (local only).
+    pub sound_pull_enabled: bool,
 
     /// Template for each chat line, with `{n}` replaced by the count. Used as-is for the single
     /// heads-up message when `chat_countdown_enabled` is off, and once per second (for `{n}` from
@@ -67,7 +70,8 @@ impl Settings {
             overlay_font_size: 72.0,
             overlay_color: [1.0, 1.0, 1.0],
             overlay_locked: true,
-            sound_enabled: true,
+            sound_countdown_enabled: true,
+            sound_pull_enabled: true,
             chat_message_template: String::new(),
             chat_pull_text: String::new(),
             chat_cancel_text: String::new(),

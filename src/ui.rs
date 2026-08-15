@@ -26,13 +26,17 @@ fn draw_overlay(ui: &Ui) {
         return;
     }
 
-    let (text, text_color) = match snapshot {
-        Some(s) if s.is_pull => {
-            if s.just_reached_pull {
-                crate::sound::play_pull_sound_if_enabled();
-            }
-            ("PULL!".to_string(), PULL_FLASH_COLOR)
+    if let Some(s) = snapshot {
+        if s.just_entered_countdown_sound_window {
+            crate::sound::play_countdown_if_enabled();
         }
+        if s.just_reached_pull {
+            crate::sound::play_pull_if_enabled();
+        }
+    }
+
+    let (text, text_color) = match snapshot {
+        Some(s) if s.is_pull => ("PULL!".to_string(), PULL_FLASH_COLOR),
         Some(s) => (s.remaining.to_string(), [color[0], color[1], color[2], 1.0]),
         None => ("10".to_string(), [color[0], color[1], color[2], 1.0]), // preview while editing
     };
@@ -263,16 +267,6 @@ pub fn render_options(ui: &Ui) {
     }
     tooltip(ui, "Color of the counting-down numbers (the final \"PULL!\" flash always stays red).");
 
-    let mut sound_enabled = state::SETTINGS.lock().unwrap().sound_enabled;
-    if ui.checkbox("Sound on PULL!", &mut sound_enabled) {
-        state::SETTINGS.lock().unwrap().sound_enabled = sound_enabled;
-        settings::save();
-    }
-    tooltip(
-        ui,
-        "Plays a short alert sound the moment the count reaches \"PULL!\" - local only,\nnot sent to anyone else.",
-    );
-
     if ui.button("Reset appearance") {
         let defaults = settings::Settings::const_default();
         {
@@ -285,6 +279,27 @@ pub fn render_options(ui: &Ui) {
         settings::save();
     }
     tooltip(ui, "Resets position, size, and color back to defaults.");
+
+    ui.separator();
+    ui.text("Sound");
+    ui.text_disabled("Both are local only - nothing is played on anyone else's client.");
+
+    let mut sound_countdown = state::SETTINGS.lock().unwrap().sound_countdown_enabled;
+    if ui.checkbox("Countdown sound (last 5s)", &mut sound_countdown) {
+        state::SETTINGS.lock().unwrap().sound_countdown_enabled = sound_countdown;
+        settings::save();
+    }
+    tooltip(
+        ui,
+        "Beeps down the final five seconds, in time with the on-screen numbers.\nThe sound is a fixed 5 seconds long, so it's skipped entirely when the\nstarting number is below 5.",
+    );
+
+    let mut sound_pull = state::SETTINGS.lock().unwrap().sound_pull_enabled;
+    if ui.checkbox("Pull sound", &mut sound_pull) {
+        state::SETTINGS.lock().unwrap().sound_pull_enabled = sound_pull;
+        settings::save();
+    }
+    tooltip(ui, "Plays the moment the count reaches \"PULL!\".");
 
     ui.separator();
     ui.text("Automation");
