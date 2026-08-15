@@ -3,6 +3,7 @@ name = "gw2-pull-countdown-plugin"
 version = "0.1.0"
 edition = "2021"
 description = "Commander-triggered pull countdown, synced across the whole squad."
+repository = "https://github.com/ModzsoTheBeast/gw2-pull-countdown-plugin"
 
 [lib]
 name = "gw2_pull_countdown_plugin"

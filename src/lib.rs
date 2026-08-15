@@ -18,6 +18,8 @@ nexus::export! {
     load: load,
     unload: unload,
     flags: nexus::AddonFlags::None,
+    provider: nexus::UpdateProvider::GitHub,
+    update_link: "https://github.com/ModzsoTheBeast/gw2-pull-countdown-plugin",
     log_filter: "warn,gw2_pull_countdown_plugin=info",
 }
 

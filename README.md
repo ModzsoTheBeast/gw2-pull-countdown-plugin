@@ -92,6 +92,25 @@ it stays crisp instead of blurring like a scaled-up bitmap font would, the quick
 icon (`quick_access_icon.png` / `_hover.png`), and a short generated alert sound (`pull.wav`,
 a two-tone chime synthesized for this project - no licensing to track).
 
+## Releasing a new version
+
+The addon declares itself as GitHub-updatable (`provider`/`update_link` in `src/lib.rs`), so
+anyone with it installed - whether or not it's ever listed in Nexus's official Library - gets
+notified of new versions automatically, as long as releases are published a specific way:
+
+1. Bump `version` in `Cargo.toml` (e.g. `0.1.0` -> `0.1.1`).
+2. Commit, then tag the commit `v<version>` (matching Cargo.toml exactly, e.g. `v0.1.1`) and
+   push both the commit and the tag.
+3. `.github/workflows/release.yml` picks up the tag push, builds a native Windows DLL on a
+   `windows-latest` runner, and publishes it as a GitHub Release with the `.dll` attached -
+   nothing to do manually beyond pushing the tag.
+
+Nexus's update check (verified against its own source) fetches every release from this repo,
+skips anything marked as a **pre-release**, parses each `tag_name` expecting the form
+`v?<major>.<minor>[.<build>[.<revision>]]`, and picks the highest-versioned release that has a
+`.dll` file attached - so the tag has to match that pattern and the release must not be marked
+as a pre-release, or it'll be silently ignored.
+
 If you have a real Windows machine/CI runner available, a native build works too:
 
 ```sh
