@@ -58,8 +58,15 @@ fn on_squad_update(update: &SquadUpdate) {
         return;
     }
 
-    // Can't confirm "everyone" without a member count - don't guess.
-    let Some(total_members) = crate::squad::group_member_count() else {
+    // Can't confirm "everyone" without a member count - don't guess. Prefer RTAPI's count, but
+    // this whole feature already requires Unofficial Extras to detect the ready check at all
+    // (this handler only runs because of its EXTRAS_SQUAD_UPDATE event), so fall back to the
+    // size of the same roster `extras_squad` builds from that same event stream rather than
+    // additionally requiring the separate RTAPI addon just for a headcount.
+    let Some(total_members) = crate::squad::group_member_count().or_else(|| {
+        let roster_len = crate::extras_squad::roster_len();
+        (roster_len > 0).then_some(roster_len as u32)
+    }) else {
         return;
     };
 

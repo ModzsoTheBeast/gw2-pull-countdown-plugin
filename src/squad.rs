@@ -65,10 +65,27 @@ pub fn am_i_commander() -> bool {
         .any(|m| m.is_self && m.is_commander)
 }
 
+/// Whether the local player is a squad lieutenant, based on the same RTAPI-accumulated roster.
+pub fn am_i_lieutenant() -> bool {
+    SQUAD
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|m| m.is_self && m.is_lieutenant)
+}
+
 /// Whether the local player is allowed to trigger a pull: fails open if RTAPI can't confirm
-/// who the commander is, otherwise requires actually being the commander.
+/// group state at all. Otherwise mirrors the same rule `chat_listen::sender_may_control` applies
+/// to received messages - a party has no leader to check against, so anyone in it may; a squad
+/// requires being the commander or a lieutenant.
 pub fn am_i_allowed_to_pull() -> bool {
-    !rtapi_available() || am_i_commander()
+    if !rtapi_available() {
+        return true;
+    }
+    match current_channel() {
+        ChatChannel::Party => true,
+        ChatChannel::Squad => am_i_commander() || am_i_lieutenant(),
+    }
 }
 
 /// Number of members in the current group, if RTAPI can report it.
@@ -82,9 +99,13 @@ pub fn group_member_count() -> Option<u32> {
 ///
 /// RTAPI can tell us for certain whether it's a party or a squad, but plenty of players won't
 /// have the separate RTAPI addon installed - being in a group at all is independent of that, so
-/// this must not require it. Without RTAPI, default to "squad" (the primary use case: a
-/// commander leading a squad) rather than silently sending nothing; if the player isn't
-/// actually grouped, GW2 itself just shows a local "not in a squad" message and nothing is sent.
+/// this must not require it. Without RTAPI, guessing "squad" unconditionally is actively wrong
+/// for a plain party: GW2 silently drops a `/squad` command typed while not in a squad (a local
+/// "you are not in a squad" message only the sender sees), so the pull would start locally but
+/// never reach anyone else. Instead fall back to Unofficial Extras' squad roster
+/// (`extras_squad`) - it's only ever populated for real squads (its squad panel doesn't exist
+/// for parties), so a non-empty roster means squad, empty means party. If truly ungrouped, the
+/// guess doesn't matter either way - GW2 rejects both commands locally with nothing sent.
 pub fn current_channel() -> ChatChannel {
     RealTimeApi::get()
         .and_then(|rtapi| rtapi.read_group())
@@ -93,5 +114,11 @@ pub fn current_channel() -> ChatChannel {
             Ok(GroupType::Squad | GroupType::RaidSquad) => Some(ChatChannel::Squad),
             _ => None,
         })
-        .unwrap_or(ChatChannel::Squad)
+        .unwrap_or_else(|| {
+            if crate::extras_squad::roster_len() > 0 {
+                ChatChannel::Squad
+            } else {
+                ChatChannel::Party
+            }
+        })
 }

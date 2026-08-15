@@ -29,6 +29,10 @@ pub struct Settings {
     pub sound_countdown_enabled: bool,
     /// On by default: plays an alert sound the moment the count reaches "PULL!" (local only).
     pub sound_pull_enabled: bool,
+    /// 0.0-1.0 playback volume for the countdown sound, independent of the pull sound's.
+    pub sound_countdown_volume: f32,
+    /// 0.0-1.0 playback volume for the pull sound, independent of the countdown sound's.
+    pub sound_pull_volume: f32,
 
     /// Template for each chat line, with `{n}` replaced by the count. Used as-is for the single
     /// heads-up message when `chat_countdown_enabled` is off, and once per second (for `{n}` from
@@ -73,6 +77,8 @@ impl Settings {
             overlay_locked: true,
             sound_countdown_enabled: true,
             sound_pull_enabled: true,
+            sound_countdown_volume: 1.0,
+            sound_pull_volume: 1.0,
             chat_message_template: String::new(),
             chat_pull_text: String::new(),
             chat_cancel_text: String::new(),

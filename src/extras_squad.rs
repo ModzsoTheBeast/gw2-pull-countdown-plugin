@@ -61,3 +61,14 @@ pub fn may_control_pull(account_name: &str) -> bool {
 fn normalize(account_name: &str) -> String {
     account_name.trim().trim_start_matches(':').to_ascii_lowercase()
 }
+
+/// Number of squad members currently tracked.
+///
+/// Extras only ever populates this roster for real squads - the in-game squad panel it reads
+/// doesn't exist for a plain party - so a non-zero count is also usable as a "we're in a squad,
+/// not just a party" signal when RTAPI can't confirm that directly (see `squad::current_channel`
+/// and `ready_check`, both of which need a squad-vs-party or member-count answer without
+/// requiring the separate RTAPI addon).
+pub fn roster_len() -> usize {
+    ROSTER.lock().unwrap().len()
+}

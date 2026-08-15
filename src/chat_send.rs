@@ -20,6 +20,10 @@ const CHAT_FOCUS_TIMEOUT: Duration = Duration::from_millis(300);
 const CHAT_FOCUS_POLL: Duration = Duration::from_millis(5);
 /// Fallback wait if MumbleLink is unavailable to poll textbox focus directly.
 const CHAT_FOCUS_FALLBACK_SLEEP: Duration = Duration::from_millis(180);
+/// How long a "textbox focused" reading must hold true before it's trusted - see
+/// `textbox_already_focused`.
+const TEXTBOX_FOCUS_DEBOUNCE: Duration = Duration::from_millis(200);
+const TEXTBOX_FOCUS_DEBOUNCE_POLL: Duration = Duration::from_millis(20);
 /// Settle time between typing the message and submitting it.
 const SUBMIT_SETTLE: Duration = Duration::from_millis(30);
 
@@ -93,7 +97,7 @@ fn find_game_hwnd() -> Option<isize> {
 /// rejected - see `on_ready_check_succeeded` for the silent variant.
 pub fn on_pull_pressed(total: u32) {
     if !squad::am_i_allowed_to_pull() {
-        nexus::alert::send_alert("PullSync: only the squad commander can control the pull.");
+        nexus::alert::send_alert("PullSync: only the squad commander or a lieutenant can control the pull.");
         return;
     }
     if crate::countdown::is_active() {
@@ -162,6 +166,14 @@ fn render_message(template: &str, n: u32) -> String {
     template.replace("{n}", &n.to_string())
 }
 
+/// Sleeps until `deadline`, or returns immediately if it's already passed.
+fn sleep_until(deadline: Instant) {
+    let now = Instant::now();
+    if deadline > now {
+        thread::sleep(deadline - now);
+    }
+}
+
 fn run_chat_sequence(target: (isize, ChatChannel), total: u32) {
     let (hwnd_raw, channel) = target;
     let (template, pull_text, countdown_enabled, countdown_start, use_broadcast) = {
@@ -175,11 +187,24 @@ fn run_chat_sequence(target: (isize, ChatChannel), total: u32) {
         )
     };
 
+    let Some(start_instant) = crate::countdown::start_instant() else {
+        return; // countdown already ended somehow before this thread got going
+    };
+
     if !countdown_enabled {
+        // Single heads-up message up front, then the actual "pull now" line once the timer
+        // completes - two messages total, so both can safely broadcast (the first+last
+        // restriction below only matters for the per-second mode's much tighter spacing).
         let message = render_message(&template, total);
         if !send_chat_line(hwnd_raw, channel, &message, use_broadcast) {
             nexus::alert::send_alert("PullSync: couldn't send the chat message (see Nexus's log for why).");
         }
+
+        sleep_until(start_instant + Duration::from_secs(total as u64));
+        if !crate::countdown::is_active() {
+            return; // cancelled before the timer completed
+        }
+        send_chat_line(hwnd_raw, channel, &pull_text, use_broadcast);
         return;
     }
 
@@ -195,16 +220,8 @@ fn run_chat_sequence(target: (isize, ChatChannel), total: u32) {
         }
     }
 
-    let Some(start_instant) = crate::countdown::start_instant() else {
-        return; // countdown already ended somehow before this thread got going
-    };
-
     for n in (0..=start_from).rev() {
-        let target = start_instant + Duration::from_secs((total - n) as u64);
-        let now = Instant::now();
-        if target > now {
-            thread::sleep(target - now);
-        }
+        sleep_until(start_instant + Duration::from_secs((total - n) as u64));
 
         // Bail out early if the countdown was cancelled mid-sequence - no point still typing
         // tail ticks for a pull that no longer exists.
@@ -286,10 +303,27 @@ fn send_chat_line(hwnd_raw: isize, channel: ChatChannel, message: &str, use_broa
     true
 }
 
+/// A single MumbleLink read right at trigger time can catch a one-tick-stale snapshot that
+/// still shows an already-closed textbox as focused - seen in practice right after an
+/// auto-pull-after-ready-check trigger, where it silently dropped the chat message even though
+/// no textbox was actually open. So a "focused" reading isn't trusted until it holds for a short
+/// window; a momentary stale `true` clears well within that and no longer aborts the send, while
+/// a genuinely open chat box stays `true` throughout and is still correctly caught.
 fn textbox_already_focused() -> bool {
-    get_mumble_link()
-        .map(|link| link.read_ui_state().contains(UiState::TEXTBOX_HAS_FOCUS))
-        .unwrap_or(false)
+    let Some(link) = get_mumble_link() else {
+        return false;
+    };
+
+    let deadline = Instant::now() + TEXTBOX_FOCUS_DEBOUNCE;
+    loop {
+        if !link.read_ui_state().contains(UiState::TEXTBOX_HAS_FOCUS) {
+            return false;
+        }
+        if Instant::now() >= deadline {
+            return true;
+        }
+        thread::sleep(TEXTBOX_FOCUS_DEBOUNCE_POLL);
+    }
 }
 
 fn wait_for_textbox_focus() -> bool {

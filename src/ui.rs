@@ -302,6 +302,11 @@ pub fn render_options(ui: &Ui) {
         ui,
         "Beeps down the final five seconds, in time with the on-screen numbers.\nThe sound is a fixed 5 seconds long, so it's skipped entirely when the\nstarting number is below 5.",
     );
+    let mut countdown_volume = state::SETTINGS.lock().unwrap().sound_countdown_volume;
+    if Slider::new("Countdown volume", 0.0f32, 1.0).build(ui, &mut countdown_volume) {
+        state::SETTINGS.lock().unwrap().sound_countdown_volume = countdown_volume;
+        settings::save();
+    }
 
     let mut sound_pull = state::SETTINGS.lock().unwrap().sound_pull_enabled;
     if ui.checkbox("Pull sound", &mut sound_pull) {
@@ -309,6 +314,11 @@ pub fn render_options(ui: &Ui) {
         settings::save();
     }
     tooltip(ui, "Plays the moment the count reaches \"PULL!\".");
+    let mut pull_volume = state::SETTINGS.lock().unwrap().sound_pull_volume;
+    if Slider::new("Pull volume", 0.0f32, 1.0).build(ui, &mut pull_volume) {
+        state::SETTINGS.lock().unwrap().sound_pull_volume = pull_volume;
+        settings::save();
+    }
 
     ui.separator();
     ui.text("Automation");

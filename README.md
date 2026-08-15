@@ -8,17 +8,21 @@ whatever starting number is currently configured; clicking it again while a coun
 cancels it instead (and posts a "Pull cancelled" chat message). Starting a pull:
 
 - immediately shows a big, customizable on-screen countdown overlay, counting down to `PULL!`
-  (with local countdown/pull sounds, each individually toggleable), and
-- sends a chat message into the current squad/party chat (squad if it can't be determined - see
-  Configuring below), so anyone without the addon still sees a plain-text heads-up. By default
-  this is a single message (e.g. "Pulling in 10..."); optionally it can instead count down in
-  chat too, once per second, for the last few seconds. It can also go through GW2's squad
-  broadcast instead of normal chat, for more attention - see Configuring.
+  (with local countdown/pull sounds, each individually toggleable and independently
+  volume-adjustable), and
+- sends a chat message into the current squad/party chat (squad or party is detected
+  automatically - see Configuring below), so anyone without the addon still sees a plain-text
+  heads-up. By default that's two messages - an upfront heads-up (e.g. "Pulling in 10...") and a
+  final "Pull!" line when the timer completes; optionally it can instead count down in chat too,
+  once per second, for the last few seconds. It can also go through GW2's squad broadcast instead
+  of normal chat, for more attention - see Configuring.
 
 The icon itself is always visible to everyone (Nexus has no way to hide it conditionally), but
-only the actual squad/party commander can trigger or cancel a pull with it - anyone else gets a
-small "only the squad commander can control the pull" alert instead. There's also an option to
-trigger a pull automatically once a squad ready check finishes with everyone ready.
+triggering or cancelling a pull with it follows the same rule as who's obeyed on the receiving
+end (see "Who can start a countdown on your screen" below): in a squad, only the commander or a
+lieutenant may; in a plain party, anyone may. Anyone else gets a small "only the squad commander
+or a lieutenant can control the pull" alert instead. There's also an option to trigger a pull
+automatically once a squad ready check finishes with everyone ready.
 
 Other squad members running this addon **and** [arcdps](https://www.deltaconnected.com/arcdps/)
 + [Unofficial Extras](https://github.com/Krappa322/arcdps_unofficial_extras_releases) will have
@@ -55,8 +59,9 @@ Below that:
   it (refused if it's the only one left). Useful for e.g. a "Raid" profile vs. a "Fractals"
   profile with different wording or a different starting number.
 - **Starting number** - what the overlay (and, by default, the chat message) counts down from.
-- **Chat message** - "Countdown in chat" (off by default) adds a per-second countdown in chat for
-  the last few seconds ("Chat countdown start"), on top of the upfront heads-up message; "Chat
+- **Chat message** - by default, exactly two lines go out: the upfront heads-up and a final
+  "Pull!" line once the timer completes. "Countdown in chat" additionally adds a per-second
+  countdown for the last few seconds ("Chat countdown start"), in between those two. "Chat
   message" and "Pull text" customize the wording - word them however you like, but keep the
   `{n}` in the countdown message, since receiving clients read the count off that number (the
   `[PullSync]` tag is added automatically and isn't part of your wording). "Use squad broadcast"
@@ -67,11 +72,11 @@ Below that:
   overlay) if sent every second, so the ticks in between always use normal chat regardless.
 - **Overlay appearance** - position, size, and color. To reposition, uncheck "Lock position": a
   draggable preview appears on screen, and re-checking the box locks it back in place.
-- **Sound** - two independent toggles, both on by default and both local only (nothing is played
-  on anyone else's client). The countdown sound beeps down the final five seconds in time with
-  the on-screen numbers; because it's a fixed five seconds long, it's skipped entirely when the
-  starting number is below 5. The pull sound fires as the count reaches "PULL!". Cancelling a
-  pull stops the countdown sound immediately.
+- **Sound** - two independent toggles with their own volume sliders, both on by default at full
+  volume and both local only (nothing is played on anyone else's client). The countdown sound
+  beeps down the final five seconds in time with the on-screen numbers; because it's a fixed five
+  seconds long, it's skipped entirely when the starting number is below 5. The pull sound fires
+  as the count reaches "PULL!". Cancelling a pull stops the countdown sound immediately.
 - **Automation** - "Auto-pull after ready check" triggers a pull automatically once a squad
   ready check finishes with everyone ready (needs arcdps + Unofficial Extras to detect it).
 
@@ -83,7 +88,7 @@ Every setting has a tooltip - hover over its label for details.
 - Optional, for the overlay to mirror to other squad members: [arcdps](https://www.deltaconnected.com/arcdps/)
   + [Unofficial Extras](https://github.com/Krappa322/arcdps_unofficial_extras_releases) also
   installed on their end.
-- Optional, to restrict who can actually trigger a pull to the real commander:
+- Optional, to restrict who can actually trigger a pull to the real commander/lieutenant:
   [RTAPI](https://github.com/RaidcoreGG/GW2-RealTime-API-Releases) installed as its own Nexus
   addon (search "RTAPI" in Nexus's Library tab, or download it from that link and drop it in the
   same `addons` folder as this one) - it's a separate addon by the Raidcore team, not a GW2
@@ -162,15 +167,16 @@ There's no headless test harness for a live game overlay, so verification is man
    in the Nexus log; the quick access icon appears in the toolbar.
 2. RTAPI off - clicking the icon still starts the local countdown and still sends the chat
    message (fail-open, since who's commander can't be confirmed).
-3. RTAPI on, non-commander in a squad - clicking the icon shows the "only the squad commander"
-   alert and does nothing else; the overlay still appears when someone else sends a `pull N`
-   message.
+3. RTAPI on, plain member (not commander/lieutenant) in a squad - clicking the icon shows the
+   "only the squad commander or a lieutenant" alert and does nothing else; the overlay still
+   appears when the commander or a lieutenant sends a `pull N` message. A lieutenant should be
+   able to trigger/cancel just like the commander.
 4. RTAPI on, commander, leading an actual squad (not just a party) - clicking the icon lands the
    message in squad chat (whole squad, not just your subgroup), the local overlay starts
    immediately without waiting for the chat round-trip, and it does not re-trigger when the
    echoed message arrives back.
-5. Party-only (no squad) - confirm whether `is_commander` ever reads true here; if triggering
-   never works in a plain party, confirm that's acceptable.
+5. Party-only (no squad), RTAPI on - any party member (not just whoever is "commander") can
+   trigger/cancel, and the chat message lands as `party ...` rather than `squad ...`.
 6. Cross-client mirror - a second account/friend with Nexus + arcdps + Unofficial Extras (no
    manual interaction needed on their end) sees the same countdown start from the same N shortly
    after the commander triggers a pull.
@@ -222,8 +228,15 @@ There's no headless test harness for a live game overlay, so verification is man
     shown while repositioning the overlay). Then check: a starting number below 5 plays no
     countdown sound at all but still plays the pull sound; a starting number of exactly 5 starts
     the countdown sound immediately; cancelling mid-countdown cuts the sound off; and each
-    checkbox silences its own sound independently.
+    checkbox silences its own sound independently. Also drag each volume slider to roughly half
+    and confirm that sound is noticeably quieter than the other one left at full volume.
 19. Broadcast timing - with both "Countdown in chat" and "Use squad broadcast" on, trigger a
     pull and confirm only the upfront message and the final "pull now" line show up as squad
     broadcasts, while every tick in between (5, 4, 3...) lands in normal chat instead - and that
     the ticks stay in sync with the overlay rather than queuing up behind a broadcast.
+20. Broadcast without chat countdown - with "Countdown in chat" off and "Use squad broadcast" on,
+    trigger a pull and confirm *both* the upfront message and the final "Pull!" line show up as
+    squad broadcasts (not just the first one).
+21. Ready check without RTAPI - with RTAPI not installed/active, enable "Auto-pull after ready
+    check", start a squad ready check as commander, get everyone ready, and confirm it still
+    auto-triggers for everyone (this used to silently never fire without RTAPI).
