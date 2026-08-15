@@ -39,10 +39,13 @@ fn on_squad_update(update: &SquadUpdate) {
     for user in update.iter() {
         if user.role == UserRole::SquadLeader && user.ready_status {
             // Per Unofficial Extras' docs, the leader's own ready_status flipping to true
-            // signals that a ready check was just started - reset tracking for it.
+            // signals that a ready check was just started - reset tracking for the new round.
+            // This does NOT skip counting the leader as ready (a bug in an earlier version):
+            // the leader is a squad member too and counts toward "everyone ready", so without
+            // also falling through to the insert below, the tally could never reach the full
+            // member count and a pull would never auto-trigger.
             state.ready_accounts.clear();
             state.triggered = false;
-            continue;
         }
         if user.ready_status {
             if let Some(name) = user.account_name() {
