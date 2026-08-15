@@ -37,8 +37,9 @@ pub struct Settings {
     /// Sent instead of the template once the count reaches 0.
     pub chat_pull_text: String,
     /// Sent when an in-progress pull is cancelled (triggering the icon/keybind again while a
-    /// countdown is running cancels it instead of starting a new one). Keep the word "cancel" in
-    /// there somewhere, same reasoning as "pull" for the countdown messages.
+    /// countdown is running cancels it instead of starting a new one). Keep the word "cancel"
+    /// in there somewhere: that's how a receiving client tells a cancellation apart from the
+    /// other addon messages, which are distinguished by carrying a number.
     pub chat_cancel_text: String,
     /// Off by default: post one heads-up chat message when Pull is triggered, instead of a
     /// per-second countdown in chat.

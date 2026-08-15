@@ -1,6 +1,7 @@
 mod chat_listen;
 mod chat_send;
 mod countdown;
+mod extras_squad;
 mod overlay_font;
 mod quick_access;
 mod ready_check;
@@ -29,6 +30,7 @@ fn load() {
     overlay_font::init(state::SETTINGS.lock().unwrap().overlay_font_size);
     quick_access::init();
     squad::subscribe_all();
+    extras_squad::subscribe();
     chat_listen::subscribe();
     ready_check::subscribe();
     register_render(RenderType::Render, render!(ui::render_frame)).revert_on_unload();

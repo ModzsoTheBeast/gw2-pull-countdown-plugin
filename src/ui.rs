@@ -122,6 +122,9 @@ fn draw_info_block(ui: &Ui) {
         "- For the big on-screen countdown to also appear on someone else's screen automatically, THEY need Nexus + PullSync + arcdps + Unofficial Extras installed too - otherwise they just see the chat text.",
     );
     ui.text_wrapped(
+        "- In a squad only the commander and lieutenants can start or cancel a pull for everyone; in a party anyone can. Messages are tagged [PullSync], so ordinary chat mentioning \"pull\" or \"cancel\" never triggers anything.",
+    );
+    ui.text_wrapped(
         "- Install RTAPI (a separate Nexus addon by the Raidcore team - search \"RTAPI\" in Nexus's Library tab) so only the actual commander can trigger this; it's not a GW2 setting. Without it, anyone can trigger a pull.",
     );
 }
@@ -222,7 +225,7 @@ pub fn render_options(ui: &Ui) {
     }
     tooltip(
         ui,
-        "Text posted to chat, with {n} replaced by the count.\nKeep the word \"pull\" in there somewhere - that's how squad members\nrunning this addon detect it to sync their own overlay.",
+        "Text posted to chat, with {n} replaced by the count.\nWord it however you like, but keep the {n} - squad members running this\naddon sync their overlay off that number. Messages are automatically\ntagged with [PullSync] so ordinary chat is never mistaken for a countdown.",
     );
 
     let mut pull_text = state::SETTINGS.lock().unwrap().chat_pull_text.clone();

@@ -23,6 +23,13 @@ const CHAT_FOCUS_FALLBACK_SLEEP: Duration = Duration::from_millis(180);
 /// Settle time between typing the message and submitting it.
 const SUBMIT_SETTLE: Duration = Duration::from_millis(30);
 
+/// Tag prefixed to every message this addon sends, and required by `chat_listen` before it will
+/// act on one. Without it the listener had to guess from the words "pull"/"cancel" appearing
+/// anywhere, which fired on ordinary conversation ("we pull at 10%", "cancel that") and let
+/// anyone in chat drive everyone's countdown. It stays deliberately readable, since players
+/// without the addon see this text too.
+pub const CHAT_MARKER: &str = "[PullSync]";
+
 /// Serializes every chat send: cancelling a pull while the chat countdown's tail-tick thread is
 /// mid-send used to race with it (both threads opening/typing into the chat box at once), which
 /// could garble the message or make `textbox_already_focused()` false-positive and silently drop
@@ -240,9 +247,15 @@ fn send_chat_line(hwnd_raw: isize, channel: ChatChannel, message: &str, use_broa
     // Squad broadcast only exists for squads, not parties - fall back to normal chat.
     let broadcast = use_broadcast && matches!(channel, ChatChannel::Squad);
     let (gamebind, text) = if broadcast {
-        (GameBind::UiSquadBroadcastChatFocus, message.to_string())
+        (
+            GameBind::UiSquadBroadcastChatFocus,
+            format!("{CHAT_MARKER} {message}"),
+        )
     } else {
-        (GameBind::UiChatCommand, format!("{} {message}", channel.command_word()))
+        (
+            GameBind::UiChatCommand,
+            format!("{} {CHAT_MARKER} {message}", channel.command_word()),
+        )
     };
 
     if !is_gamebind_bound(gamebind) {

@@ -24,9 +24,22 @@ Other squad members running this addon **and** [arcdps](https://www.deltaconnect
 + [Unofficial Extras](https://github.com/Krappa322/arcdps_unofficial_extras_releases) will have
 that chat message automatically detected and mirror the same countdown overlay locally, in sync
 with the commander - no networking or server involved, the chat message itself is the sync
-signal. Everyone else just sees the plain chat text. Detection just needs the word "pull"
-somewhere in the message alongside a number, so the chat text can be customized freely as long
-as it keeps saying "pull" somewhere - see Configuring below.
+signal. Everyone else just sees the plain chat text.
+
+### Who can start a countdown on your screen
+
+Since the transport is ordinary chat, anything typed in chat could in principle drive everyone's
+overlay. Two rules prevent that:
+
+- **Messages must carry the `[PullSync]` tag**, which the addon adds automatically and a human
+  would never type by hand. Ordinary conversation is therefore never mistaken for a countdown -
+  saying "we pull at 10%" or "cancel that" does nothing, no matter who says it.
+- **In a squad, only the commander or a lieutenant is obeyed.** A tagged message from any other
+  member is ignored, so a squadmate can't start or cancel pulls for everyone. In a plain party
+  there is no leader to check against, so anyone in the party may.
+
+Both checks happen on the *receiving* client, so they hold even if someone modifies their own
+copy of the addon.
 
 ## Configuring
 
@@ -44,8 +57,9 @@ Below that:
 - **Starting number** - what the overlay (and, by default, the chat message) counts down from.
 - **Chat message** - "Countdown in chat" (off by default) adds a per-second countdown in chat for
   the last few seconds ("Chat countdown start"), on top of the upfront heads-up message; "Chat
-  message" and "Pull text" customize the wording (`{n}` is replaced by the count; keep the word
-  "pull" in there for the cross-client sync to keep working - see above). "Use squad broadcast"
+  message" and "Pull text" customize the wording - word them however you like, but keep the
+  `{n}` in the countdown message, since receiving clients read the count off that number (the
+  `[PullSync]` tag is added automatically and isn't part of your wording). "Use squad broadcast"
   (off by default) sends the upfront message and the final "pull now" line through GW2's squad
   broadcast instead of normal chat - more attention-grabbing, but squad-only (falls back to
   normal chat in a plain party). Only those two lines ever broadcast, even with chat countdown
