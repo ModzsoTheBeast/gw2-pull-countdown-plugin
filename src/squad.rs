@@ -48,7 +48,9 @@ pub fn subscribe_all() {
         .revert_on_unload();
 }
 
-/// Whether the RealTime API link is active (the player enabled "Real-time Data API" in options).
+/// Whether the RTAPI link is active - i.e. whether the player has RTAPI installed as its own
+/// separate Nexus addon (https://github.com/RaidcoreGG/GW2-RealTime-API-Releases). It's not a
+/// GW2 setting, despite what an earlier version of this addon's UI incorrectly claimed.
 pub fn rtapi_available() -> bool {
     RealTimeApi::get().is_some_and(|api| api.is_active())
 }
@@ -78,8 +80,8 @@ pub fn group_member_count() -> Option<u32> {
 
 /// The chat channel to use for the pull message.
 ///
-/// RTAPI can tell us for certain whether it's a party or a squad, but plenty of players never
-/// enable "Real-time Data API" - being in a group at all is independent of that toggle, so
+/// RTAPI can tell us for certain whether it's a party or a squad, but plenty of players won't
+/// have the separate RTAPI addon installed - being in a group at all is independent of that, so
 /// this must not require it. Without RTAPI, default to "squad" (the primary use case: a
 /// commander leading a squad) rather than silently sending nothing; if the player isn't
 /// actually grouped, GW2 itself just shows a local "not in a squad" message and nothing is sent.

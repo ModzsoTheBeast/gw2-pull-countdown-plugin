@@ -1,7 +1,12 @@
 use crate::{overlay_font, settings, state};
 use nexus::imgui::{ColorEdit, Condition, InputInt, InputText, Slider, Ui, Window};
+use std::sync::Mutex;
 
 const PULL_FLASH_COLOR: [f32; 4] = [1.0, 0.2, 0.2, 1.0];
+
+/// Scratch text buffers for the profile name fields - transient UI state, not persisted.
+static NEW_PROFILE_NAME: Mutex<String> = Mutex::new(String::new());
+static RENAME_PROFILE_NAME: Mutex<String> = Mutex::new(String::new());
 
 /// Per-frame render callback: just the countdown overlay. There's no always-open panel - the
 /// pull is triggered from a quick access icon, and settings live in Nexus's own addon Options.
@@ -22,13 +27,21 @@ fn draw_overlay(ui: &Ui) {
     }
 
     let (text, text_color) = match snapshot {
-        Some(s) if s.is_pull => ("PULL!".to_string(), PULL_FLASH_COLOR),
+        Some(s) if s.is_pull => {
+            if s.just_reached_pull {
+                crate::sound::play_pull_sound_if_enabled();
+            }
+            ("PULL!".to_string(), PULL_FLASH_COLOR)
+        }
         Some(s) => (s.remaining.to_string(), [color[0], color[1], color[2], 1.0]),
         None => ("10".to_string(), [color[0], color[1], color[2], 1.0]), // preview while editing
     };
 
     let display_size = ui.io().display_size;
-    let position = [pos_frac[0] * display_size[0], pos_frac[1] * display_size[1]];
+    // `pos_frac` is the CENTER of the overlay, not its corner - "10" and "PULL!" are different
+    // widths, and anchoring by a corner would leave one edge fixed while the other drifts,
+    // making wider text look off-center relative to narrower text at the same spot.
+    let center = [pos_frac[0] * display_size[0], pos_frac[1] * display_size[1]];
 
     let mut window = Window::new("##pull_countdown_overlay")
         .title_bar(false)
@@ -38,13 +51,17 @@ fn draw_overlay(ui: &Ui) {
         .always_auto_resize(true);
 
     window = if locked {
-        window.position(position, Condition::Always).movable(false).bg_alpha(0.0)
+        window
+            .position(center, Condition::Always)
+            .position_pivot([0.5, 0.5])
+            .movable(false)
+            .bg_alpha(0.0)
     } else {
         window.movable(true).bg_alpha(0.35)
     };
 
     let font = overlay_font::current();
-    let final_pos = window.build(ui, || {
+    let final_center = window.build(ui, || {
         if let Some(font) = font {
             unsafe { nexus::imgui::sys::igPushFont(font) };
         }
@@ -55,15 +72,19 @@ fn draw_overlay(ui: &Ui) {
         if !locked {
             ui.text_disabled("drag to reposition, then lock it in PullSync's Nexus options");
         }
-        ui.window_pos()
+        // `window_pos` is the top-left corner regardless of pivot - convert to center here so
+        // the stored value always means the same thing as `center` above.
+        let top_left = ui.window_pos();
+        let size = ui.window_size();
+        [top_left[0] + size[0] / 2.0, top_left[1] + size[1] / 2.0]
     });
 
     if !locked {
-        if let Some(new_pos) = final_pos {
+        if let Some(new_center) = final_center {
             let mut s = state::SETTINGS.lock().unwrap();
             s.overlay_pos_frac = [
-                (new_pos[0] / display_size[0]).clamp(0.0, 1.0),
-                (new_pos[1] / display_size[1]).clamp(0.0, 1.0),
+                (new_center[0] / display_size[0]).clamp(0.0, 1.0),
+                (new_center[1] / display_size[1]).clamp(0.0, 1.0),
             ];
         }
     }
@@ -91,7 +112,54 @@ fn draw_info_block(ui: &Ui) {
         "- For the big on-screen countdown to also appear on someone else's screen automatically, THEY need Nexus + PullSync + arcdps + Unofficial Extras installed too - otherwise they just see the chat text.",
     );
     ui.text_wrapped(
-        "- Enable \"Real-time Data API\" in GW2 Options > General so only the actual commander can trigger this (without it, anyone can).",
+        "- Install RTAPI (a separate Nexus addon by the Raidcore team - search \"RTAPI\" in Nexus's Library tab) so only the actual commander can trigger this; it's not a GW2 setting. Without it, anyone can trigger a pull.",
+    );
+}
+
+/// Profile switcher: a dropdown of saved profiles, plus create/rename/delete for the active
+/// one. Every other setting below belongs to whichever profile is selected here.
+fn draw_profile_section(ui: &Ui) {
+    ui.text("Profile");
+
+    let names = settings::profile_names();
+    let active_name = settings::active_profile_name();
+    let mut current_index = names.iter().position(|n| *n == active_name).unwrap_or(0);
+    if ui.combo_simple_string("Active profile", &mut current_index, &names) {
+        if let Some(name) = names.get(current_index) {
+            settings::switch_profile(name);
+        }
+    }
+    tooltip(
+        ui,
+        "Switch between saved configurations - each profile has its own starting number, chat\nwording, overlay appearance, and automation settings.",
+    );
+
+    let mut new_name = NEW_PROFILE_NAME.lock().unwrap().clone();
+    InputText::new(ui, "New profile name", &mut new_name).build();
+    *NEW_PROFILE_NAME.lock().unwrap() = new_name.clone();
+    ui.same_line();
+    if ui.button("Create") {
+        settings::create_profile(&new_name);
+        *NEW_PROFILE_NAME.lock().unwrap() = String::new();
+    }
+    tooltip(ui, "Creates a new profile as a copy of the current one, and switches to it.");
+
+    let mut rename_to = RENAME_PROFILE_NAME.lock().unwrap().clone();
+    InputText::new(ui, "Rename active profile to", &mut rename_to).build();
+    *RENAME_PROFILE_NAME.lock().unwrap() = rename_to.clone();
+    ui.same_line();
+    if ui.button("Rename") {
+        settings::rename_active_profile(&rename_to);
+        *RENAME_PROFILE_NAME.lock().unwrap() = String::new();
+    }
+    tooltip(ui, "Renames the currently active profile (the one selected above).");
+
+    if ui.button("Delete active profile") {
+        settings::delete_active_profile();
+    }
+    tooltip(
+        ui,
+        "Deletes the currently active profile and switches to another one.\nRefuses if it's the only profile left - there's always at least one.",
     );
 }
 
@@ -99,6 +167,9 @@ fn draw_info_block(ui: &Ui) {
 /// Configure button) - no `Window::new` wrapper needed here, Nexus already provides one.
 pub fn render_options(ui: &Ui) {
     draw_info_block(ui);
+    ui.separator();
+
+    draw_profile_section(ui);
     ui.separator();
 
     let mut start_count = state::SETTINGS.lock().unwrap().start_count as i32;
@@ -158,7 +229,7 @@ pub fn render_options(ui: &Ui) {
     }
     tooltip(
         ui,
-        "Off (default): posts to normal squad/party chat.\nOn: posts through GW2's squad broadcast (Shift+Enter) instead - more attention-grabbing,\ngood for PUGs without a dedicated timer, but can feel redundant for a group that already\nhas one. Squad-only; falls back to normal chat automatically when you're only in a party.",
+        "Off (default): posts to normal squad/party chat.\nOn: the upfront message and the final \"pull now\" line post through GW2's squad broadcast\ninstead - more attention-grabbing, good for PUGs without a dedicated timer. Any per-second\nchat countdown ticks in between always use normal chat regardless of this, since broadcasts\nstay on screen for several seconds and queue up (getting out of sync) if sent that often.\nSquad-only; falls back to normal chat automatically when you're only in a party.",
     );
 
     ui.separator();
@@ -191,6 +262,16 @@ pub fn render_options(ui: &Ui) {
         settings::save();
     }
     tooltip(ui, "Color of the counting-down numbers (the final \"PULL!\" flash always stays red).");
+
+    let mut sound_enabled = state::SETTINGS.lock().unwrap().sound_enabled;
+    if ui.checkbox("Sound on PULL!", &mut sound_enabled) {
+        state::SETTINGS.lock().unwrap().sound_enabled = sound_enabled;
+        settings::save();
+    }
+    tooltip(
+        ui,
+        "Plays a short alert sound the moment the count reaches \"PULL!\" - local only,\nnot sent to anyone else.",
+    );
 
     if ui.button("Reset appearance") {
         let defaults = settings::Settings::const_default();

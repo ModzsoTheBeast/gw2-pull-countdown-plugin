@@ -5,6 +5,7 @@ mod overlay_font;
 mod quick_access;
 mod ready_check;
 mod settings;
+mod sound;
 mod squad;
 mod state;
 mod ui;

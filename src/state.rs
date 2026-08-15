@@ -1,9 +1,18 @@
 use crate::countdown::CountdownState;
-use crate::settings::Settings;
+use crate::settings::{Profile, Settings};
 use nexus::rtapi::GroupMemberOwned;
 use std::sync::{Mutex, OnceLock};
 
+/// The active profile's settings - what everything else in the addon reads/writes. Kept as its
+/// own static (rather than looked up through `PROFILES` each time) since it's read constantly
+/// from the render loop; `settings::save()` writes it back into the active profile's slot.
 pub static SETTINGS: Mutex<Settings> = Mutex::new(Settings::const_default());
+
+/// All saved profiles, in stored order.
+pub static PROFILES: Mutex<Vec<Profile>> = Mutex::new(Vec::new());
+
+/// Name of the profile currently loaded into `SETTINGS`.
+pub static ACTIVE_PROFILE: Mutex<String> = Mutex::new(String::new());
 
 pub static SQUAD: Mutex<Vec<GroupMemberOwned>> = Mutex::new(Vec::new());
 

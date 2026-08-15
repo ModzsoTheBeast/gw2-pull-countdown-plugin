@@ -7,8 +7,8 @@ in Nexus's own Keybinds panel). Clicking it (or pressing the keybind) starts the
 whatever starting number is currently configured; clicking it again while a countdown is running
 cancels it instead (and posts a "Pull cancelled" chat message). Starting a pull:
 
-- immediately shows a big, customizable on-screen countdown overlay, counting down to `PULL!`,
-  and
+- immediately shows a big, customizable on-screen countdown overlay, counting down to `PULL!`
+  (with a short local alert sound the instant it gets there), and
 - sends a chat message into the current squad/party chat (squad if it can't be determined - see
   Configuring below), so anyone without the addon still sees a plain-text heads-up. By default
   this is a single message (e.g. "Pulling in 10..."); optionally it can instead count down in
@@ -36,16 +36,24 @@ that screen summarizes how the addon works and what other people need for it to 
 (the same points covered above), so it's there whenever you or a squadmate need a reminder.
 Below that:
 
+- **Profile** - everything else on this screen belongs to whichever profile is selected here.
+  Switch between saved profiles with the dropdown, create a new one (starts as a copy of the
+  current one, so you tweak instead of starting from scratch), rename the active one, or delete
+  it (refused if it's the only one left). Useful for e.g. a "Raid" profile vs. a "Fractals"
+  profile with different wording or a different starting number.
 - **Starting number** - what the overlay (and, by default, the chat message) counts down from.
 - **Chat message** - "Countdown in chat" (off by default) adds a per-second countdown in chat for
   the last few seconds ("Chat countdown start"), on top of the upfront heads-up message; "Chat
   message" and "Pull text" customize the wording (`{n}` is replaced by the count; keep the word
   "pull" in there for the cross-client sync to keep working - see above). "Use squad broadcast"
-  (off by default) sends through GW2's squad broadcast instead of normal chat - more
-  attention-grabbing, but squad-only (falls back to normal chat in a plain party), and can feel
-  redundant for a group that already runs on a shared timer.
-- **Overlay appearance** - position, size, and color. To reposition, uncheck "Lock position": a
-  draggable preview appears on screen, and re-checking the box locks it back in place.
+  (off by default) sends the upfront message and the final "pull now" line through GW2's squad
+  broadcast instead of normal chat - more attention-grabbing, but squad-only (falls back to
+  normal chat in a plain party). Only those two lines ever broadcast, even with chat countdown
+  on - broadcasts stay on screen for several seconds and queue up (falling out of sync with the
+  overlay) if sent every second, so the ticks in between always use normal chat regardless.
+- **Overlay appearance** - position, size, color, and a short local alert sound on "PULL!"
+  (on by default). To reposition, uncheck "Lock position": a draggable preview appears on
+  screen, and re-checking the box locks it back in place.
 - **Automation** - "Auto-pull after ready check" triggers a pull automatically once a squad
   ready check finishes with everyone ready (needs arcdps + Unofficial Extras to detect it).
 
@@ -57,9 +65,11 @@ Every setting has a tooltip - hover over its label for details.
 - Optional, for the overlay to mirror to other squad members: [arcdps](https://www.deltaconnected.com/arcdps/)
   + [Unofficial Extras](https://github.com/Krappa322/arcdps_unofficial_extras_releases) also
   installed on their end.
-- Optional, to restrict who can actually trigger a pull to the real commander: "Real-time Data
-  API" enabled in GW2 under Options > General. Without it, anyone can trigger a pull
-  (fail-open).
+- Optional, to restrict who can actually trigger a pull to the real commander:
+  [RTAPI](https://github.com/RaidcoreGG/GW2-RealTime-API-Releases) installed as its own Nexus
+  addon (search "RTAPI" in Nexus's Library tab, or download it from that link and drop it in the
+  same `addons` folder as this one) - it's a separate addon by the Raidcore team, not a GW2
+  setting. Without it, anyone can trigger a pull (fail-open).
 
 ## Building
 
@@ -78,8 +88,9 @@ Copy it into `<Guild Wars 2 install>/addons/`.
 
 `assets/` bundles a dedicated font used only for the countdown overlay text (`Roboto.ttf`,
 SIL Open Font License - see `assets/Roboto-OFL.txt`), rebaked at whatever size is configured so
-it stays crisp instead of blurring like a scaled-up bitmap font would, plus the quick access
-toolbar icon (`quick_access_icon.png` / `_hover.png`).
+it stays crisp instead of blurring like a scaled-up bitmap font would, the quick access toolbar
+icon (`quick_access_icon.png` / `_hover.png`), and a short generated alert sound (`pull.wav`,
+a two-tone chime synthesized for this project - no licensing to track).
 
 If you have a real Windows machine/CI runner available, a native build works too:
 
@@ -115,11 +126,14 @@ There's no headless test harness for a live game overlay, so verification is man
    never touched by receiving a countdown (only the sender types anything).
 9. Persisted settings - change the starting number and overlay appearance in Nexus's Configure
    panel, restart GW2, confirm they're remembered (and check
-   `<GW2 install>/addons/pull_countdown/settings.json` directly too).
+   `<GW2 install>/addons/pull_countdown/settings.json` directly too - it now holds every profile,
+   not just one flat settings object).
 10. Overlay appearance - uncheck "Lock position", confirm a draggable preview appears and follows
     the mouse while dragging, adjust the Size slider and confirm the text stays sharp (not
     blurry/pixelated) at large sizes, adjust the Color picker, then lock it back and confirm the
-    real countdown uses the new position/size/color.
+    real countdown uses the new position/size/color. Let a countdown run all the way to "PULL!"
+    and confirm it stays centered on the same spot as the numbers, rather than drifting to one
+    side since "PULL!" is wider text than a single digit.
 11. Hot-reload mid-squad - with an active squad already formed, reload the addon and re-check
     commander detection recovers.
 12. Chat customization - edit "Chat message" and "Pull text" in Configure, trigger a pull, and
@@ -135,7 +149,21 @@ There's no headless test harness for a live game overlay, so verification is man
     before everyone readies, and confirm nothing triggers.
 15. Cancel - trigger a pull, then click the icon again mid-countdown: confirm the overlay
     disappears immediately, a "Pull cancelled" chat line goes out, and (with chat countdown on)
-    any remaining tail ticks stop rather than continuing to post after the cancel.
+    any remaining tail ticks stop rather than continuing to post after the cancel. Specifically
+    try cancelling right as a tail tick number appears in chat (the race that used to make the
+    cancel message silently not send at all) and confirm it now always goes out, even if a
+    stray tick number occasionally lands just before it.
 16. Squad broadcast - enable "Use squad broadcast" while leading a squad, trigger a pull, and
     confirm the message appears as a squad broadcast rather than a normal chat line; then try it
     from a plain party (no squad) and confirm it falls back to a normal chat message instead.
+17. Profiles - change a few settings, create a new profile (confirm it starts as a copy), change
+    something in the new one, switch back to the original and confirm its own settings (not the
+    new profile's) are what's active, then rename and delete the new profile and confirm it can't
+    delete the last remaining profile.
+18. Sound - confirm the alert sound plays exactly once, right as the overlay reaches "PULL!" (not
+    once per frame during the linger, and not for the mirrored "10" preview while dragging the
+    overlay), and that unchecking "Sound on PULL!" silences it.
+19. Broadcast timing - with both "Countdown in chat" and "Use squad broadcast" on, trigger a
+    pull and confirm only the upfront message and the final "pull now" line show up as squad
+    broadcasts, while every tick in between (5, 4, 3...) lands in normal chat instead - and that
+    the ticks stay in sync with the overlay rather than queuing up behind a broadcast.

@@ -3,6 +3,7 @@ use nexus::data_link::get_mumble_link;
 use nexus::data_link::mumble::UiState;
 use nexus::gamebind::{GameBind, is_gamebind_bound, press_gamebind, release_gamebind};
 use nexus::wnd_proc::send_wnd_proc_to_game;
+use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
@@ -21,6 +22,12 @@ const CHAT_FOCUS_POLL: Duration = Duration::from_millis(5);
 const CHAT_FOCUS_FALLBACK_SLEEP: Duration = Duration::from_millis(180);
 /// Settle time between typing the message and submitting it.
 const SUBMIT_SETTLE: Duration = Duration::from_millis(30);
+
+/// Serializes every chat send: cancelling a pull while the chat countdown's tail-tick thread is
+/// mid-send used to race with it (both threads opening/typing into the chat box at once), which
+/// could garble the message or make `textbox_already_focused()` false-positive and silently drop
+/// the cancel line entirely. Every `send_chat_line` call now waits its turn instead.
+static CHAT_SEND_LOCK: Mutex<()> = Mutex::new(());
 
 /// `HWND` wraps a raw, non-`Send` pointer, so we cache the discovered handle as a plain `isize`
 /// and only reconstruct the `HWND` on the thread that actually uses it.
@@ -201,10 +208,19 @@ fn run_chat_sequence(target: (isize, ChatChannel), total: u32) {
         } else {
             render_message(&template, n)
         };
+
+        // Squad broadcast stays on screen for several seconds and queues up (falling out of
+        // sync with the overlay) if sent faster than that - so only the final "pull now" tick
+        // ever broadcasts here. The *first* tick also broadcasts, but only when it's standing in
+        // for the upfront message (i.e. that message was skipped above because the chat
+        // countdown covers the whole range) - every tick in between always uses normal chat.
+        let is_first_tick = start_from >= total && n == start_from;
+        let tick_use_broadcast = use_broadcast && (n == 0 || is_first_tick);
+
         // Best-effort per tick - a single skipped/failed line (e.g. the player's own chat box
         // was open at that instant) just means that one line doesn't show up; not worth an
         // alert for every tick of a several-second countdown.
-        send_chat_line(hwnd_raw, channel, &message, use_broadcast);
+        send_chat_line(hwnd_raw, channel, &message, tick_use_broadcast);
     }
 }
 
@@ -212,6 +228,8 @@ fn run_chat_sequence(target: (isize, ChatChannel), total: u32) {
 /// actually sent. `message` is the raw content, without any channel-command prefix - that's
 /// added here (skipped entirely for broadcast, which isn't a `/`-routed channel).
 fn send_chat_line(hwnd_raw: isize, channel: ChatChannel, message: &str, use_broadcast: bool) -> bool {
+    let _guard = CHAT_SEND_LOCK.lock().unwrap();
+
     if textbox_already_focused() {
         log::info!("a textbox was already focused, not auto-typing: {message}");
         return false;
