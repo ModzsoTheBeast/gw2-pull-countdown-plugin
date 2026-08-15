@@ -233,7 +233,7 @@ dependencies = [
 
 [[package]]
 name = "gw2-pull-countdown-plugin"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "log",
  "nexus",
@@ -249,6 +249,9 @@ source = "git+https://github.com/zerthox/gw2-mumble-rs#87f2ed37fb8258285b08e566f
 dependencies = [
  "bitflags 2.13.1",
  "num_enum",
+ "serde",
+ "serde_json",
+ "serde_repr",
  "strum",
  "thiserror",
  "windows",
@@ -591,6 +594,17 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "serde_repr"
+version = "0.1.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d3b1629de253c70a0508c3899572da79ca359fdab27c7920ff00406df418906"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.3",
 ]
 
 [[package]]

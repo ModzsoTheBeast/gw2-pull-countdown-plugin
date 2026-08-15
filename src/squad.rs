@@ -1,4 +1,5 @@
 use crate::state::{self, SQUAD};
+use nexus::data_link::get_mumble_link;
 use nexus::event::event_consume;
 use nexus::event::rtapi::{RTAPI_GROUP_MEMBER_JOINED, RTAPI_GROUP_MEMBER_LEFT, RTAPI_GROUP_MEMBER_UPDATE};
 use nexus::rtapi::{GroupMember, GroupType, RealTimeApi};
@@ -74,17 +75,48 @@ pub fn am_i_lieutenant() -> bool {
         .any(|m| m.is_self && m.is_lieutenant)
 }
 
-/// Whether the local player is allowed to trigger a pull: fails open if RTAPI can't confirm
-/// group state at all. Otherwise mirrors the same rule `chat_listen::sender_may_control` applies
-/// to received messages - a party has no leader to check against, so anyone in it may; a squad
-/// requires being the commander or a lieutenant.
+/// Whether the local player currently has their commander tag active, read directly from
+/// MumbleLink's `Identity` (official, ArenaNet-populated - needs neither RTAPI nor Unofficial
+/// Extras). Doesn't distinguish "leads this specific squad" from "has the tag on in general",
+/// but in practice a squad only exists because someone's tag is active, so this is a reliable,
+/// always-available stand-in for `am_i_commander()` when RTAPI can't confirm it.
+fn am_i_commander_via_mumble() -> bool {
+    get_mumble_link()
+        .and_then(|link| link.parse_identity().ok())
+        .is_some_and(|identity| identity.commander)
+}
+
+/// Whether the local player is allowed to trigger a pull.
+///
+/// Mirrors the same rule `chat_listen::sender_may_control` applies to received messages - a
+/// party has no leader to check against, so anyone in it may; a squad requires being the
+/// commander or a lieutenant. Without RTAPI, lieutenant status can't be confirmed at all (no
+/// addon-independent signal for it), so only a confirmed commander (via MumbleLink's `Identity`)
+/// is allowed - this used to fail open unconditionally instead, which let anyone start a pull
+/// that only ever showed up on their own screen (receiving clients correctly rejected it as
+/// unauthorised), with no indication anything had gone wrong.
 pub fn am_i_allowed_to_pull() -> bool {
-    if !rtapi_available() {
-        return true;
-    }
     match current_channel() {
         ChatChannel::Party => true,
-        ChatChannel::Squad => am_i_commander() || am_i_lieutenant(),
+        ChatChannel::Squad if rtapi_available() => am_i_commander() || am_i_lieutenant(),
+        ChatChannel::Squad => am_i_commander_via_mumble(),
+    }
+}
+
+/// Whether this client should be the one to auto-send chat when a squad ready check completes.
+///
+/// Unlike a manual trigger (a human deliberately presses the button once), this fires
+/// identically on every eligible client at the same moment - so unlike `am_i_allowed_to_pull`,
+/// which intentionally allows both the commander and any lieutenant, this must resolve to
+/// exactly one sender. Otherwise the commander's client *and* every lieutenant's client would
+/// each independently open chat and type their own copy of the message. The commander is the
+/// natural unique choice - a squad has at most one - so lieutenants are excluded here even
+/// though they're still allowed to trigger/cancel manually.
+pub fn am_i_the_auto_pull_sender() -> bool {
+    if rtapi_available() {
+        am_i_commander()
+    } else {
+        am_i_commander_via_mumble()
     }
 }
 

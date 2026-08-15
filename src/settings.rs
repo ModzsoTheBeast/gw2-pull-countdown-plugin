@@ -29,9 +29,12 @@ pub struct Settings {
     pub sound_countdown_enabled: bool,
     /// On by default: plays an alert sound the moment the count reaches "PULL!" (local only).
     pub sound_pull_enabled: bool,
-    /// 0.0-1.0 playback volume for the countdown sound, independent of the pull sound's.
+    /// 0.0-`sound::MAX_VOLUME` playback volume for the countdown sound, independent of the pull
+    /// sound's. 1.0 plays the bundled recording as-is; above that amplifies it (the recordings
+    /// weren't mastered particularly loud).
     pub sound_countdown_volume: f32,
-    /// 0.0-1.0 playback volume for the pull sound, independent of the countdown sound's.
+    /// 0.0-`sound::MAX_VOLUME` playback volume for the pull sound, independent of the countdown
+    /// sound's.
     pub sound_pull_volume: f32,
 
     /// Template for each chat line, with `{n}` replaced by the count. Used as-is for the single

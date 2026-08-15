@@ -103,31 +103,40 @@ pub fn on_pull_pressed(total: u32) {
     if crate::countdown::is_active() {
         cancel_pull();
     } else {
-        start_pull(total);
+        start_pull(total, false);
     }
 }
 
 /// Handles an automatic Pull trigger (after a successful ready check). Every squad member's
-/// client sees the same ready-check event, so rejection here must be silent - showing "only the
-/// commander can pull" to everyone whenever a ready check succeeds would be pure noise. Never
-/// cancels - `ready_check` only calls this once per successful check.
+/// client sees the same ready-check event at the same moment, so this can't reuse
+/// `am_i_allowed_to_pull` (which intentionally allows both the commander and any lieutenant) -
+/// with several eligible clients all deciding independently, every one of them would open chat
+/// and type its own copy of the message. `am_i_the_auto_pull_sender` picks exactly one (the
+/// commander), so rejection here must also be silent - showing an alert to everyone whenever a
+/// ready check succeeds would be pure noise. Never cancels - `ready_check` only calls this once
+/// per successful check.
 pub fn on_ready_check_succeeded(total: u32) {
-    if !squad::am_i_allowed_to_pull() {
+    if !squad::am_i_the_auto_pull_sender() {
         return;
     }
-    start_pull(total);
+    start_pull(total, true);
 }
 
 /// Starts the local countdown immediately, then - on a background thread, so the synthetic-
 /// input wait/poll steps never hitch the render loop - sends chat message(s) announcing it.
-fn start_pull(total: u32) {
+///
+/// `auto_triggered` marks a ready-check-driven start (as opposed to a manual button press): GW2
+/// posts its own squad-broadcast-style notice the moment a ready check completes, so our own
+/// upfront broadcast would otherwise queue up behind it and land late, out of sync with the
+/// overlay (which always starts immediately regardless) - see `run_chat_sequence`.
+fn start_pull(total: u32, auto_triggered: bool) {
     crate::countdown::start(total);
 
     let Some(target) = resolve_send_target() else {
         return;
     };
 
-    thread::spawn(move || run_chat_sequence(target, total));
+    thread::spawn(move || run_chat_sequence(target, total, auto_triggered));
 }
 
 /// Cancels the local countdown immediately, then - same background-thread reasoning as
@@ -174,7 +183,7 @@ fn sleep_until(deadline: Instant) {
     }
 }
 
-fn run_chat_sequence(target: (isize, ChatChannel), total: u32) {
+fn run_chat_sequence(target: (isize, ChatChannel), total: u32, auto_triggered: bool) {
     let (hwnd_raw, channel) = target;
     let (template, pull_text, countdown_enabled, countdown_start, use_broadcast) = {
         let s = crate::state::SETTINGS.lock().unwrap();
@@ -187,16 +196,23 @@ fn run_chat_sequence(target: (isize, ChatChannel), total: u32) {
         )
     };
 
+    // GW2 posts its own squad-broadcast-style notice the moment a ready check completes, which
+    // an auto-triggered upfront broadcast would otherwise queue up behind (broadcasts share one
+    // on-screen slot) - landing late and out of sync with the overlay, which always starts
+    // immediately. Normal chat has no such slot to queue behind, so force it just for that one
+    // upfront moment; everything after it (ticks, the final "pull now" line) fires seconds
+    // later, well after GW2's own notice has cleared, so it broadcasts normally.
+    let upfront_broadcast = use_broadcast && !auto_triggered;
+
     let Some(start_instant) = crate::countdown::start_instant() else {
         return; // countdown already ended somehow before this thread got going
     };
 
     if !countdown_enabled {
         // Single heads-up message up front, then the actual "pull now" line once the timer
-        // completes - two messages total, so both can safely broadcast (the first+last
-        // restriction below only matters for the per-second mode's much tighter spacing).
+        // completes.
         let message = render_message(&template, total);
-        if !send_chat_line(hwnd_raw, channel, &message, use_broadcast) {
+        if !send_chat_line(hwnd_raw, channel, &message, upfront_broadcast) {
             nexus::alert::send_alert("PullSync: couldn't send the chat message (see Nexus's log for why).");
         }
 
@@ -215,7 +231,7 @@ fn run_chat_sequence(target: (isize, ChatChannel), total: u32) {
     // twice back to back.
     if start_from < total {
         let message = render_message(&template, total);
-        if !send_chat_line(hwnd_raw, channel, &message, use_broadcast) {
+        if !send_chat_line(hwnd_raw, channel, &message, upfront_broadcast) {
             nexus::alert::send_alert("PullSync: couldn't send the chat message (see Nexus's log for why).");
         }
     }
@@ -239,9 +255,14 @@ fn run_chat_sequence(target: (isize, ChatChannel), total: u32) {
         // sync with the overlay) if sent faster than that - so only the final "pull now" tick
         // ever broadcasts here. The *first* tick also broadcasts, but only when it's standing in
         // for the upfront message (i.e. that message was skipped above because the chat
-        // countdown covers the whole range) - every tick in between always uses normal chat.
+        // countdown covers the whole range), and subject to the same auto-trigger restriction as
+        // the upfront message above - every tick in between always uses normal chat.
         let is_first_tick = start_from >= total && n == start_from;
-        let tick_use_broadcast = use_broadcast && (n == 0 || is_first_tick);
+        let tick_use_broadcast = match n {
+            0 => use_broadcast,
+            _ if is_first_tick => upfront_broadcast,
+            _ => false,
+        };
 
         // Best-effort per tick - a single skipped/failed line (e.g. the player's own chat box
         // was open at that instant) just means that one line doesn't show up; not worth an

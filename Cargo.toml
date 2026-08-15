@@ -1,6 +1,6 @@
 [package]
 name = "gw2-pull-countdown-plugin"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 description = "Commander-triggered pull countdown, synced across the whole squad."
 # Shown as the addon's author in Nexus's addon manager - blank without this.
@@ -17,7 +17,7 @@ crate-type = ["cdylib"]
 nexus = { git = "https://github.com/zerthox/nexus-rs", features = [
     "rtapi",
     "extras",
-    "mumble",
+    "mumble_json",
     "log",
     "log_filter",
 ] }

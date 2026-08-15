@@ -8,9 +8,16 @@ const COUNTDOWN_SOUND: &[u8] = include_bytes!("../assets/countdown.wav");
 const PULL_SOUND: &[u8] = include_bytes!("../assets/pull.wav");
 
 /// Holds a volume-scaled copy of whatever's currently playing, keeping it alive for as long as
-/// `PlaySoundW` might still be reading from it. Only used below full volume - at full volume the
-/// static embedded bytes are played directly and this stays `None`.
+/// `PlaySoundW` might still be reading from it. Only used away from unity gain - at exactly 1.0
+/// the static embedded bytes are played directly and this stays `None`.
 static CURRENT_BUFFER: Mutex<Option<Vec<u8>>> = Mutex::new(None);
+
+/// Upper bound for the volume sliders. The bundled recordings peak quiet - `countdown.wav` only
+/// reaches ~11% of full scale, `pull.wav` ~7.5% - so 1.0 (unity gain, i.e. play the file exactly
+/// as recorded) wasn't loud enough on its own for every system/headset. 8x amplification is the
+/// most either file can take before its own loudest peak starts clipping (`countdown.wav` is the
+/// tighter of the two, clipping above ~8.86x).
+pub const MAX_VOLUME: f32 = 8.0;
 
 /// Plays the last-five-seconds countdown sound, if enabled in settings.
 pub fn play_countdown_if_enabled() {
@@ -48,10 +55,10 @@ pub fn stop() {
 /// earlier one rather than mixing. That's exactly what's wanted here - the countdown sound runs
 /// out precisely as the pull sound starts, and a cancel should cut the countdown short.
 fn play(wav: &'static [u8], volume: f32) {
-    let volume = volume.clamp(0.0, 1.0);
+    let volume = volume.clamp(0.0, MAX_VOLUME);
     let mut guard = CURRENT_BUFFER.lock().unwrap();
 
-    if volume >= 0.999 {
+    if (volume - 1.0).abs() < 0.001 {
         // Safety: `SND_MEMORY` means `pszSound` is a pointer to an in-memory WAV image rather
         // than a filename. The data is `'static` (embedded in the binary), so it outlives the
         // call, and `SND_ASYNC` playback reads from it afterwards.
