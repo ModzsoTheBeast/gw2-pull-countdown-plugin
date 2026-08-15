@@ -3,6 +3,10 @@ name = "gw2-pull-countdown-plugin"
 version = "0.1.0"
 edition = "2021"
 description = "Commander-triggered pull countdown, synced across the whole squad."
+# Shown as the addon's author in Nexus's addon manager - blank without this.
+authors = ["ModzsoTheBeast"]
+# Not just metadata: with the GitHub update provider, nexus's export! macro derives the addon's
+# update link from this, so changing/removing it changes where clients check for updates.
 repository = "https://github.com/ModzsoTheBeast/gw2-pull-countdown-plugin"
 
 [lib]

@@ -1,14 +1,18 @@
 name: Release
 
 # Builds a native Windows DLL and publishes it as a GitHub Release whenever a version tag
-# (e.g. v0.1.1) is pushed. Nexus checks this repo's releases for updates (see the `provider`
-# and `update_link` fields in src/lib.rs) - it looks at every release's tag name (expects
-# "vX.Y.Z", matching Cargo.toml's version), skips anything marked as a pre-release, and picks
-# the first ".dll" file it finds attached to the newest one.
+# (e.g. v0.1.1) is pushed. Nexus checks this repo's releases for updates (see `provider` in
+# src/lib.rs) - it reads every release, parses each tag name, and picks the HIGHEST-VERSIONED
+# one that has a ".dll" attached (not the most recently published one - re-releasing an older
+# version to roll users back does not work).
+#
+# The tag filter deliberately only matches plain vX.Y.Z tags: Nexus's version parser rejects
+# suffixes like "-rc.1" and requires all three components, so anything else would publish a
+# release that every client silently ignores.
 on:
   push:
     tags:
-      - "v*"
+      - "v[0-9]+.[0-9]+.[0-9]+"
 
 permissions:
   contents: write
@@ -19,16 +23,41 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # The release step authenticates via GITHUB_TOKEN directly, so there's no need to
+          # leave a write-capable credential sitting in .git/config during the build.
+          persist-credentials: false
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      # A tag that disagrees with Cargo.toml is worse than a failed build: the DLL reports the
+      # Cargo.toml version, so tagging v0.1.1 while Cargo.toml still says 0.1.0 makes Nexus
+      # download the "new" version, see it still calling itself 0.1.0, and offer it again
+      # forever. Drifting the other way means nobody ever gets the update.
+      - name: Verify tag matches Cargo.toml version
+        shell: bash
+        run: |
+          crate_version=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/^version = "(.*)"/\1/')
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [ "$crate_version" != "$tag_version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match Cargo.toml version $crate_version. Bump Cargo.toml (and commit Cargo.lock) before tagging."
+            exit 1
+          fi
+          echo "Tag and Cargo.toml agree on $crate_version"
+
+      # --locked: the nexus dependency is an unpinned git dependency, so without this CI would
+      # happily build the shipped binary against whatever nexus-rs HEAD is that day rather than
+      # the commit recorded in Cargo.lock and actually tested.
       - name: Build
-        run: cargo build --release
+        run: cargo build --release --locked
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: target/release/gw2_pull_countdown_plugin.dll
+          # Defaults to false, which would publish an asset-less release (invisible to Nexus,
+          # since it needs a .dll attached) while still reporting the job as successful.
+          fail_on_unmatched_files: true
           prerelease: false
           generate_release_notes: true

@@ -94,22 +94,35 @@ a two-tone chime synthesized for this project - no licensing to track).
 
 ## Releasing a new version
 
-The addon declares itself as GitHub-updatable (`provider`/`update_link` in `src/lib.rs`), so
-anyone with it installed - whether or not it's ever listed in Nexus's official Library - gets
-notified of new versions automatically, as long as releases are published a specific way:
+The addon declares itself as GitHub-updatable (`provider` in `src/lib.rs`, pointing at
+Cargo.toml's `repository`), so anyone with it installed - whether or not it's ever listed in
+Nexus's official Library - gets notified of new versions automatically, as long as releases are
+published a specific way:
 
-1. Bump `version` in `Cargo.toml` (e.g. `0.1.0` -> `0.1.1`).
-2. Commit, then tag the commit `v<version>` (matching Cargo.toml exactly, e.g. `v0.1.1`) and
-   push both the commit and the tag.
-3. `.github/workflows/release.yml` picks up the tag push, builds a native Windows DLL on a
-   `windows-latest` runner, and publishes it as a GitHub Release with the `.dll` attached -
-   nothing to do manually beyond pushing the tag.
+1. Bump `version` in `Cargo.toml` (e.g. `0.1.0` -> `0.1.1`), then run a build so `Cargo.lock`
+   picks up the new version too, and commit both.
+2. Tag the commit `v<version>` (matching Cargo.toml exactly, e.g. `v0.1.1`) and push both the
+   commit and the tag.
+3. `.github/workflows/release.yml` picks up the tag push, verifies the tag matches Cargo.toml,
+   builds a native Windows DLL on a `windows-latest` runner, and publishes it as a GitHub
+   Release with the `.dll` attached - nothing to do manually beyond pushing the tag.
 
 Nexus's update check (verified against its own source) fetches every release from this repo,
-skips anything marked as a **pre-release**, parses each `tag_name` expecting the form
-`v?<major>.<minor>[.<build>[.<revision>]]`, and picks the highest-versioned release that has a
-`.dll` file attached - so the tag has to match that pattern and the release must not be marked
-as a pre-release, or it'll be silently ignored.
+parses each `tag_name`, and picks the **highest-versioned** release with a `.dll` attached - not
+the most recent one, so re-publishing an older version to roll users back does not work. Things
+that make a release silently invisible to it:
+
+- **Tags with fewer than three components.** `v0.2` passes its regex but then throws while
+  parsing, and the release is skipped. Always `vX.Y.Z`.
+- **Tags with a suffix**, e.g. `v0.2.0-rc.1` - same silent skip. (The workflow's tag filter
+  only matches plain `vX.Y.Z` for this reason, so these never get published in the first place.)
+- **Bumping only a fourth "revision" component**, e.g. `v0.1.0.1`. `nexus-rs` encodes a stable
+  release's revision as `-1`, which the Nexus host reads back as `65535`, so no real revision
+  number can ever exceed it. Only major/minor/build bumps actually trigger an update.
+
+Releases marked as **pre-release** on GitHub are skipped for most users, but not all: Nexus has
+a per-addon "allow pre-releases" toggle that's available for GitHub-hosted addons, so those
+users do receive them.
 
 If you have a real Windows machine/CI runner available, a native build works too:
 
